@@ -3,19 +3,20 @@
 import React, { useState, useEffect, use } from 'react';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import OTPVerification from './Components/OTP';
+import OTPVerification from './Components/qrCode';
 
 export default function Home() {
 
   const router = useRouter();
 
-  const [currentView, setCurrentView] = useState<'login' | 'otp'>('login');
+
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [terminalText, setTerminalText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
+  const [qrImage, setQrImage] = useState<string>('');
 
   const terminalMessages = [
     '$ qrng-auth --initialize',
@@ -72,24 +73,34 @@ useEffect(() => {
 }, [router]);
 
 
+//fetch request to get the code 
+useEffect(() => {
+  const fetchQR = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/generate_qr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ data: 'otpauth://totp/Example:123456' }),
+      });
+      if (!response.ok) throw new Error('QR generation failed');
+      const blob = await response.blob();
+      const imageUrl = URL.createObjectURL(blob);
+      setQrImage(imageUrl);
+    } catch (error) {
+      console.error('Error generating QR:', error);
+    }
+  };
+
+  fetchQR();
+}, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate successful login, then show OTP verification
-    setCurrentView('otp');
-  };
-
-  const handleOTPVerify = (otp: string) => {
-    console.log('OTP verification:', otp);
-    // Handle OTP verification logic here
-  };
-
-  const handleBackToLogin = () => {
-    setCurrentView('login');
-  };
-
-  if (currentView === 'otp') {
-    return <OTPVerification onBack={handleBackToLogin} onVerify={handleOTPVerify} />;
   }
+
+  
 
   return (
     <div className="min-h-screen mt-[50px] bg-black text-green-400 font-mono p-4">
