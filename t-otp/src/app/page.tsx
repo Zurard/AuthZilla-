@@ -1,14 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Terminal } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import OTPVerification from './Components/qrCode';
+import QrPage from './Components/qrCode';
 
 export default function Home() {
-
   const router = useRouter();
-
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -16,7 +14,9 @@ export default function Home() {
   const [rememberMe, setRememberMe] = useState(false);
   const [terminalText, setTerminalText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
-  const [qrImage, setQrImage] = useState<string>('');
+  const [showQR, setShowQR] = useState(false);
+
+  console.log(showQR)
 
   const terminalMessages = [
     '$ qrng-auth --initialize',
@@ -24,7 +24,7 @@ export default function Home() {
     'Establishing secure connection...',
     'Authentication terminal ready.',
     '',
-    'Please enter your credentials below:'
+    'Please enter your credentials below:',
   ];
 
   useEffect(() => {
@@ -44,7 +44,10 @@ export default function Home() {
           setTerminalText(currentMessage);
           messageIndex++;
           charIndex = 0;
-          setTimeout(typeWriter, messageIndex === terminalMessages.length - 2 ? 1000 : 400);
+          setTimeout(
+            typeWriter,
+            messageIndex === terminalMessages.length - 2 ? 1000 : 400
+          );
         }
       } else {
         setIsTyping(false);
@@ -53,54 +56,14 @@ export default function Home() {
     typeWriter();
   }, []);
 
-useEffect(() => {
-  // Add error handling for fetch
-  const checkServer = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/hello');
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      console.log('Backend response:', data);
-    } catch (error) {
-      console.error('Error connecting to backend:', error);
-      router.push('/error');
-    }
-  };
-
-  checkServer();
-}, [router]);
-
-
-//fetch request to get the code 
-useEffect(() => {
-  const fetchQR = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/generate_qr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ data: 'otpauth://totp/Example:123456' }),
-      });
-      if (!response.ok) throw new Error('QR generation failed');
-      const blob = await response.blob();
-      const imageUrl = URL.createObjectURL(blob);
-      setQrImage(imageUrl);
-    } catch (error) {
-      console.error('Error generating QR:', error);
-    }
-  };
-
-  fetchQR();
-}, []);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-  }
-
-  
+    try {
+      setShowQR(true);
+    } catch (error) {
+      console.error('Authentication Error:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen mt-[50px] bg-black text-green-400 font-mono p-4">
@@ -118,98 +81,88 @@ useEffect(() => {
               <div className="w-3 h-3 bg-black border border-black"></div>
             </div>
           </div>
-          
-          {/* Terminal Content */}
-          <div className="p-6 min-h-[600px]">
-            {/* Terminal Output */}
-            <div className="mb-8">
-              <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                {terminalText}
-                {isTyping && <span className="animate-pulse">█</span>}
-              </pre>
-            </div>
 
-            {/* Login Form */}
-            {!isTyping && (
-              <div className="space-y-6">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Email Field */}
-                  <div>
-                    <div className="flex items-center mb-2">
-                      <Mail className="w-4 h-4 mr-2" />
-                      <label htmlFor="email" className="text-sm">
-                        EMAIL:
-                      </label>
-                    </div>
-                    <input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-black border border-green-400 px-3 py-2 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
-                      placeholder="user@domain.com"
-                      required
-                    />
-                  </div>
+          <div>
+            {showQR ? (
+              <QrPage email={email}/>
+            ) : (
+              <div className="p-6 min-h-[600px]">
+                {/* Terminal Output */}
+                <div className="mb-8">
+                  <pre className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {terminalText}
+                    {isTyping && <span className="animate-pulse">█</span>}
+                  </pre>
+                </div>
 
-                  {/* Password Field */}
-                  <div>
-                    <div className="flex items-center mb-2">
-                      <Lock className="w-4 h-4 mr-2" />
-                      <label htmlFor="password" className="text-sm">
-                        PASSWORD:
-                      </label>
-                    </div>
-                    <div className="relative">
-                      <input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-black border border-green-400 px-3 py-2 pr-10 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
-                        placeholder="••••••••••••••••"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-green-400 hover:text-green-300"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
+                {/* Login Form */}
+                {!isTyping && (
+                  <div className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      {/* Email Field */}
+                      <div>
+                        <div className="flex items-center mb-2">
+                          <Mail className="w-4 h-4 mr-2" />
+                          <label htmlFor="email" className="text-sm">
+                            EMAIL:
+                          </label>
+                        </div>
+                        <input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full bg-black border border-green-400 px-3 py-2 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
+                          placeholder="user@domain.com"
+                          required
+                        />
+                      </div>
 
-                  {/* Options */}
-                  <div className="flex items-center justify-between text-sm">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="mr-2 accent-green-400"
-                      />
-                      Remember session
-                    </label>
-                    <button
-                      type="button"
-                      className="text-green-400 hover:text-green-300 underline"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
+                      {/* Password Field */}
+                      <div>
+                        <div className="flex items-center mb-2">
+                          <Lock className="w-4 h-4 mr-2" />
+                          <label htmlFor="password" className="text-sm">
+                            PASSWORD:
+                          </label>
+                        </div>
+                        <div className="relative">
+                          <input
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full bg-black border border-green-400 px-3 py-2 pr-10 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
+                            placeholder="••••••••••••••••"
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-green-400 hover:text-green-300"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
 
-                  {/* Submit Button */}
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      className="w-full border border-green-400 bg-black text-green-400 py-3 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center group"
-                    >
-                      AUTHENTICATE
-                      <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
-                    </button>
+                      {/* Submit Button */}
+                      <div className="pt-4">
+                        <button
+                          type="submit"
+                          className="w-full border border-green-400 bg-black text-green-400 py-3 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center group"
+                        >
+                          AUTHENTICATE
+                          <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
+                        </button>
+                      </div>
+                    </form>
                   </div>
-                </form>
+                )}
               </div>
             )}
           </div>
@@ -217,4 +170,4 @@ useEffect(() => {
       </div>
     </div>
   );
-};
+}
