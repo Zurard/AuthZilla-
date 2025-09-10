@@ -1,19 +1,18 @@
 # program for qrng 
 
-MAX_SIZE = 256 #for a seed of the max size
-
 from qiskit import QuantumCircuit,transpile
 from qiskit_aer import AerSimulator
 
 def qrng_random_int(bytes):
     rng =  []
-    n=200
+    n=6
     max_val = 10
-    while ( n >= 0):
+    while ( n > 0):
         bits = generate_random_bits(16)
         num = int(''.join(map(str, bits)), 2)
         # print(num % max_val)
         rng.append(num % max_val)
+        
         n -= 1
     return rng
 
@@ -45,7 +44,10 @@ def bits_to_bytes(bits):
     return bytes_list
 
 
-bits = generate_random_bits(100)
-bytes = bits_to_bytes(bits)
-rng = qrng_random_int(bytes)
-print(rng)
+def generate_secret_key():
+    bits = generate_random_bits(100)
+    bytes = bits_to_bytes(bits)
+    rng = qrng_random_int(bytes)
+    secret_key = ''.join(map(str, rng))
+    return secret_key
+

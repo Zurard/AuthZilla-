@@ -3,7 +3,7 @@ from flask_cors import CORS
 import qrcode
 from io import BytesIO
 import base64
-
+from qrng_key import generate_secret_key
 
 app = Flask(__name__)
 
@@ -29,7 +29,7 @@ def generate_qr():
         print("Received request")  # Debug log
         # Get data from request
         if request.method == 'POST':
-            data = 'Suppose this is the secret key that is used to gererate the t-otp'
+            data = generate_secret_key()
             print(f"Received data: {data}")  # Debug log
         else:
             data = 'Default QR Code'
