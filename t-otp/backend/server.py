@@ -4,6 +4,7 @@ import qrcode
 from io import BytesIO
 import base64
 from qrng_key import generate_secret_key
+from pqcrypto.kem.mceliece6688128 import encrypt, decrypt, generate_keypair
 
 app = Flask(__name__)
 
@@ -49,7 +50,26 @@ def generate_qr():
     except Exception as e:
         print(f"Error generating QR code: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
+@app.route("/pqc", methods=['GET'])
+def pqc():
+    # Step 1: Generate keypair
+    public_key, secret_key = generate_keypair()
 
+    # Step 2: Encapsulate with public key (client side)
+    ciphertext, shared_secret_client = encrypt(public_key)
+
+    # Step 3: Decapsulate with secret key (server side)
+    shared_secret_server = decrypt(ciphertext, secret_key)
+
+    # Debug check
+    assert shared_secret_client == shared_secret_server
+
+    return jsonify({
+        "public_key_len": len(public_key),
+        "ciphertext_len": len(ciphertext),
+        "shared_secret": shared_secret_server.hex()
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000)
