@@ -5,6 +5,7 @@ from io import BytesIO
 import base64
 from qrng_key import generate_secret_key
 from pqcrypto.kem.mceliece6688128 import encrypt, decrypt, generate_keypair
+from hashlib import sha256
 
 app = Flask(__name__)
 
@@ -18,37 +19,40 @@ CORS(app, resources={
     }
 })
 
+def simple_xor(data: bytes, key: bytes) -> bytes:
+    return bytes([d ^ key[i % len(key)] for i, d in enumerate(data)])
 
 # just a test api to check if backend is working
 @app.route('/api/hello', methods=['GET'])
 def hello_world():
     return jsonify({"message": "Hello from Python API!"})
 
-@app.route("/generate_qr", methods=['GET', 'POST'])
+# QR Code generation endpoint
+@app.route("/generate_qr", methods=["POST"])
 def generate_qr():
     try:
-        print("Received request")  # Debug log
-        # Get data from request
-        if request.method == 'POST':
-            data = generate_secret_key()
-            print(f"Received data: {data}")  # Debug log
-        else:
-            data = 'Default QR Code'
-            
-        # Generate QR code
-        qr = qrcode.make(data)
+        otp_seed = generate_secret_key().encode()  # Generate OTP seed using QRNG
+        public_key, secret_key = generate_keypair()
+        ciphertext, shared_secret_client = encrypt(public_key)
+        shared_secret_server = decrypt(secret_key, ciphertext)
+        assert shared_secret_client == shared_secret_server, "Shared secret mismatch!"
+        print(f"Shared Secret: {shared_secret_client.hex()}")
+        ciphertext_b64 = base64.b64encode(ciphertext).decode()
+
+        otp_seed_b32 = base64.b32encode(otp_seed).decode()
+        qr = qrcode.make(f"otpauth://totp/MyApp?secret={otp_seed_b32}&issuer=MyApp")
+
         buffer = BytesIO()
         qr.save(buffer, format="PNG")
-        buffer.seek(0)
-        
-        # Convert to base64
+        buffer.seek(0)  
         img_str = base64.b64encode(buffer.getvalue()).decode()
-        
+
         return jsonify({
-            "qr": f"data:image/png;base64,{img_str}"
+            "qr": f"data:image/png;base64,{img_str}",
+            "shared_secret": base64.b64encode(shared_secret_client).decode()
         })
     except Exception as e:
-        print(f"Error generating QR code: {str(e)}")
+        print(f"Error in PQC: {e}")
         return jsonify({"error": str(e)}), 500
     
 @app.route("/pqc", methods=['GET'])

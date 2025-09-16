@@ -64,6 +64,7 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack }) => {
           headers: {
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ email }),  
           credentials: 'include'
         });
 
