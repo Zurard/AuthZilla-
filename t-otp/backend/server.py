@@ -3,6 +3,8 @@ from flask_cors import CORS
 import qrcode
 from io import BytesIO
 import base64
+import time
+import pyotp
 from qrng_key import generate_secret_key
 from pqcrypto.kem.mceliece6688128 import encrypt, decrypt, generate_keypair
 from hashlib import sha256
@@ -40,7 +42,7 @@ def generate_qr():
         ciphertext_b64 = base64.b64encode(ciphertext).decode()
 
         otp_seed_b32 = base64.b32encode(otp_seed).decode()
-        qr = qrcode.make(f"otpauth://totp/MyApp?secret={otp_seed_b32}&issuer=MyApp")
+        qr = qrcode.make(f"otpauth://totp/AuthZilla?secret={otp_seed_b32}&issuer=AuthZilla&ciphertext={ciphertext_b64}")
 
         buffer = BytesIO()
         qr.save(buffer, format="PNG")
@@ -74,6 +76,39 @@ def pqc():
         "ciphertext_len": len(ciphertext),
         "shared_secret": shared_secret_server.hex()
     })
+
+@app.route("/server-time", methods=["GET"])
+def server_time():
+    return jsonify({
+        "timestamp": int(time.time())
+    })
+
+@app.route("/verify-otp", methods=["POST"])
+def verify_otp():
+    try:
+        data = request.get_json()
+        otp_code = data.get("otp")
+        secret_b64 = data.get("secret")
+        
+        if not otp_code or not secret_b64:
+            return jsonify({"valid": False, "error": "Missing OTP code or secret"}), 400
+        
+        # Decode the secret from base64
+        secret_bytes = base64.b64decode(secret_b64)
+        
+        # Convert to base32 for TOTP
+        secret_b32 = base64.b32encode(secret_bytes).decode()
+        
+        # Create TOTP verifier
+        totp = pyotp.TOTP(secret_b32)
+        
+        # Verify with a 1-step tolerance (30 seconds before/after)
+        is_valid = totp.verify(otp_code, valid_window=1)
+        
+        return jsonify({"valid": is_valid})
+    except Exception as e:
+        print(f"OTP verification error: {e}")
+        return jsonify({"valid": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5000)

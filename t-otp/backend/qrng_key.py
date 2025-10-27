@@ -33,7 +33,7 @@ def generate_random_bits(n_bits):
         n_bits -= 1
     return bits
 
-def bits_to_bytes(bits):
+def bits_to_bytes(bits):    
     bytes_list = []
     for i in range(0, len(bits), 8):
         byte = 0

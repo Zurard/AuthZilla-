@@ -1,22 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Terminal } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Terminal, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import QrPage from './Components/qrCode';
+import OtpVerification from './Components/OtpVerfication';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Home() {
   const router = useRouter();
+  const { login, loading, error, clearError } = useAuth();
 
+  const [currentView, setCurrentView] = useState<'login' | 'qr' | 'otp'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [terminalText, setTerminalText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
-  const [showQR, setShowQR] = useState(false);
-
-  console.log(showQR)
+  const [sharedSecret, setSharedSecret] = useState('');
 
   const terminalMessages = [
     '$ qrng-auth --initialize',
@@ -56,17 +58,54 @@ export default function Home() {
     typeWriter();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearError();
+    
     try {
-      setShowQR(true);
+      const user = await login({ email, password });
+      if (user) {
+        console.log('Login successful:', user);
+        // Store user data if remember me is checked
+        if (rememberMe) {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
+        setCurrentView('qr');
+      }
     } catch (error) {
       console.error('Authentication Error:', error);
     }
   };
 
+  const handleQRSuccess = (secret: string) => {
+    setSharedSecret(secret);
+    setCurrentView('otp');
+  };
+
+  const handleOTPVerify = (otp: string) => {
+    console.log('OTP verification:', otp);
+    // Handle OTP verification logic here
+  };
+
+  const handleBackToLogin = () => {
+    setCurrentView('login');
+  };
+
+  if (currentView === 'otp') {
+    return (
+      <div className="min-h-screen bg-black text-green-400 font-mono p-4">
+        <OtpVerification 
+          sharedSecret={sharedSecret}
+          onVerified={() => console.log('OTP verified successfully')}
+          onFailed={() => console.log('OTP verification failed')}
+          onBack={() => setCurrentView('qr')}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen mt-[50px] bg-black text-green-400 font-mono p-4">
+    <div className="min-h-screen bg-black text-green-400 font-mono p-4">
       <div className="max-w-2xl mx-auto">
         {/* Terminal Header */}
         <div className="border border-green-400 mb-4">
@@ -83,8 +122,12 @@ export default function Home() {
           </div>
 
           <div>
-            {showQR ? (
-              <QrPage email={email}/>
+            {currentView === 'qr' ? (
+              <QrPage 
+                email={email} 
+                onQRGenerated={handleQRSuccess}
+                onBack={handleBackToLogin}
+              />
             ) : (
               <div className="p-6 min-h-[600px]">
                 {/* Terminal Output */}
@@ -98,6 +141,14 @@ export default function Home() {
                 {/* Login Form */}
                 {!isTyping && (
                   <div className="space-y-6">
+                    {/* Error Message */}
+                    {error && (
+                      <div className="border border-red-400 bg-red-900/20 text-red-400 p-3 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-2" />
+                        <span className="text-sm">{error}</span>
+                      </div>
+                    )}
+                    
                     <form onSubmit={handleSubmit} className="space-y-4">
                       {/* Email Field */}
                       <div>
@@ -150,17 +201,58 @@ export default function Home() {
                         </div>
                       </div>
 
+                      {/* Options */}
+                      <div className="flex items-center justify-between text-sm">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={rememberMe}
+                            onChange={(e) => setRememberMe(e.target.checked)}
+                            className="mr-2 accent-green-400"
+                          />
+                          Remember session
+                        </label>
+                        <button
+                          type="button"
+                          className="text-green-400 hover:text-green-300 underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+
                       {/* Submit Button */}
                       <div className="pt-4">
                         <button
                           type="submit"
-                          className="w-full border border-green-400 bg-black text-green-400 py-3 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center group"
+                          disabled={loading}
+                          className="w-full border border-green-400 bg-black text-green-400 py-3 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          AUTHENTICATE
-                          <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
+                          {loading ? 'AUTHENTICATING...' : 'AUTHENTICATE'}
+                          {!loading && <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />}
                         </button>
                       </div>
                     </form>
+
+                    {/* Alternative Options */}
+                    <div className="pt-6 border-t border-green-400">
+                      <div className="text-sm mb-4">Alternative authentication methods:</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <button className="border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 text-sm">
+                          QUANTUM KEY
+                        </button>
+                        <button className="border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 text-sm">
+                          BIOMETRIC
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-6 text-xs text-green-600">
+                      <div>QRNG System v2.1.4 | Quantum Secure Authentication</div>
+                      <div className="mt-1">
+                        New user? <button className="text-green-400 hover:text-green-300 underline">Request access</button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

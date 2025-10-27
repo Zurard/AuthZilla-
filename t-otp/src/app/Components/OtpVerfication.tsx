@@ -8,12 +8,14 @@ interface OtpVerificationProps {
   sharedSecret: string;
   onVerified?: () => void;
   onFailed?: () => void;
+  onBack?: () => void;
 }
 
 const OtpVerification: React.FC<OtpVerificationProps> = ({ 
   sharedSecret, 
   onVerified, 
-  onFailed 
+  onFailed,
+  onBack
 }) => {
   const [otpCode, setOtpCode] = useState<string>('');
   const [isVerified, setIsVerified] = useState<boolean | null>(null);

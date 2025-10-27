@@ -1,20 +1,22 @@
 import { useEffect, useState } from "react";
 import { Terminal, QrCode, RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
+import OtpVerification from "./OtpVerfication";
 
 interface QrPageProps {
   email: string;
   onBack?: () => void;
+  onQRGenerated?: (secret: string) => void;
 }
 
-const QrPage: React.FC<QrPageProps> = ({ email, onBack }) => {
+const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
   const [qr, setQr] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
   const [terminalText, setTerminalText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
+  const [sharedSecret, setSharedSecret] = useState<string>('');
 
   const terminalMessages = [
-    '$ qrng-auth --generate-qr',
     'Initializing quantum secure QR generator...',
     'Establishing encrypted connection...',
     'Generating quantum-secured authentication token...',
@@ -74,6 +76,12 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack }) => {
 
         const data = await response.json();
         setQr(data.qr);
+        setSharedSecret(data.shared_secret); // Assuming backend sends shared_secret
+        
+        // Call the callback with the shared secret if provided
+        if (onQRGenerated && data.shared_secret) {
+          onQRGenerated(data.shared_secret);
+        }
       } catch (error) {
         console.error('Error fetching QR code:', error);
         setError(error instanceof Error ? error.message : 'Failed to generate QR code');
@@ -225,7 +233,7 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack }) => {
                     </div>
                   </div>
                 )}
-
+            
                 {/* Action Buttons */}
                 <div className="space-y-4">
                   {qr && !loading && !error && (
