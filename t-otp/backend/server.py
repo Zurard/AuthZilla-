@@ -51,7 +51,7 @@ def generate_qr():
 
         return jsonify({
             "qr": f"data:image/png;base64,{img_str}",
-            "shared_secret": base64.b64encode(shared_secret_client).decode()
+            "shared_secret": base64.b64encode(otp_seed).decode()
         })
     except Exception as e:
         print(f"Error in PQC: {e}")
@@ -102,8 +102,11 @@ def verify_otp():
         # Create TOTP verifier
         totp = pyotp.TOTP(secret_b32)
         
+        # for debuggig
+        print(f"DEBUG: Server expects the code: {totp.now()}")
+
         # Verify with a 1-step tolerance (30 seconds before/after)
-        is_valid = totp.verify(otp_code, valid_window=1)
+        is_valid = totp.verify(otp_code)
         
         return jsonify({"valid": is_valid})
     except Exception as e:

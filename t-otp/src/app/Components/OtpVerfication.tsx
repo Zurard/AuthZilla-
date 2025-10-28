@@ -19,28 +19,42 @@ const OtpVerification: React.FC<OtpVerificationProps> = ({
   const [otpCode, setOtpCode] = useState<string>('');
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
 
-  const verifyOtp = async () => {
+const verifyOtp = async () => {
     try {
-      // Reset verification status on new attempt
       setIsVerified(null); 
       
-      const isValid = authenticator.verify({
-        token: otpCode,
-        secret: sharedSecret
+      // --- START: THE FIX ---
+      // We will call your Python API endpoint instead of verifying locally
+      const response = await fetch('http://localhost:5000/verify-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Send the OTP code and the secret to the server
+        body: JSON.stringify({
+          otp: otpCode,       // The 6-digit code from the user
+          secret: sharedSecret  // The Base64 secret you got from /generate_qr
+        }),
       });
 
-      if (isValid) {
+      const data = await response.json();
+
+      // The server will respond with { "valid": true } or { "valid": false }
+      if (response.ok && data.valid) {
         setIsVerified(true);
-        // Wait a moment before calling onVerified to show success message
         setTimeout(() => {
           onVerified && onVerified();
         }, 1500);
       } else {
+        // This will catch both network errors and a "valid: false" response
         setIsVerified(false);
         onFailed && onFailed();
       }
+      // --- END: THE FIX ---
+
     } catch (error) {
-      console.error('Error verifying OTP:', error);
+      // This catches a network failure (e.g., server is down)
+      console.error('Error calling verify API:', error);
       setIsVerified(false);
       onFailed && onFailed();
     }
