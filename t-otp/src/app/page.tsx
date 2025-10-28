@@ -1,265 +1,288 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Terminal, AlertCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import QrPage from './Components/qrCode';
-import OtpVerification from './Components/OtpVerfication';
-import { useAuth } from '@/hooks/useAuth';
+import React, { useState, useEffect, useRef } from 'react';
+import { createUser } from './actions /users';
+import { getUserByEmail } from './actions /users';
+import { getPasswordByEmail } from './actions /users';
+import QRCode from './Components/qrCode';
 
-export default function Home() {
-  const router = useRouter();
-  const { login, loading, error, clearError } = useAuth();
-
-  const [currentView, setCurrentView] = useState<'login' | 'qr' | 'otp'>('login');
+export default function App() {
+  const [currentView, setCurrentView] = useState<'login' | 'qr'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [terminalText, setTerminalText] = useState('');
-  const [isTyping, setIsTyping] = useState(true);
-  const [sharedSecret, setSharedSecret] = useState('');
-
-  const terminalMessages = [
-    '$ qrng-auth --initialize',
-    'Loading quantum entropy modules...',
-    'Establishing secure connection...',
-    'Authentication terminal ready.',
-    '',
-    'Please enter your credentials below:',
-  ];
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    let messageIndex = 0;
-    let charIndex = 0;
-    let currentMessage = '';
+    // ... your existing canvas matrix effect (no changes) ...
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const typeWriter = () => {
-      if (messageIndex < terminalMessages.length) {
-        if (charIndex < terminalMessages[messageIndex].length) {
-          currentMessage += terminalMessages[messageIndex][charIndex];
-          setTerminalText(currentMessage);
-          charIndex++;
-          setTimeout(typeWriter, 30);
-        } else {
-          currentMessage += '\n';
-          setTerminalText(currentMessage);
-          messageIndex++;
-          charIndex = 0;
-          setTimeout(
-            typeWriter,
-            messageIndex === terminalMessages.length - 2 ? 1000 : 400
-          );
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops: number[] = [];
+
+    for (let i = 0; i < columns; i++) {
+      drops[i] = Math.random() * -100;
+    }
+
+    const draw = () => {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#00ff41';
+      ctx.font = `${fontSize}px monospace`;
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
         }
-      } else {
-        setIsTyping(false);
+
+        drops[i]++;
       }
     };
-    typeWriter();
+
+    const interval = setInterval(draw, 33);
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
-    
+    setError('');
+    console.log('Attempting login for:', email);
+    setLoading(true);
+
     try {
-      const user = await login({ email, password });
+      const user = await getUserByEmail(email);
       if (user) {
-        console.log('Login successful:', user);
-        // Store user data if remember me is checked
-        if (rememberMe) {
-          localStorage.setItem('user', JSON.stringify(user));
+        console.log('User found:', user);
+        const storedPassword = await getPasswordByEmail(email);
+        if (storedPassword === password) {
+          console.log('Login successful');
+          setLoading(false);
+          setCurrentView('qr');
+        } else {
+          console.log('Invalid password');
+          setError('Invalid password');
+          setLoading(false);
         }
+        return;
+      } else {
+        await createUser(email, password);
+        console.log('User created, navigating to QR code');
+        setLoading(false);
         setCurrentView('qr');
-      }
-    } catch (error) {
-      console.error('Authentication Error:', error);
+        return;
+      }        
+    } catch (err) {
+      console.error(err);
+      setError('Authentication failed. Please try again.');
+      setLoading(false);
     }
-  };
-
-  const handleQRSuccess = (secret: string) => {
-    setSharedSecret(secret);
-    setCurrentView('otp');
-  };
-
-  const handleOTPVerify = (otp: string) => {
-    console.log('OTP verification:', otp);
-    // Handle OTP verification logic here
-  };
-
-  const handleBackToLogin = () => {
-    setCurrentView('login');
-  };
-
-  if (currentView === 'otp') {
-    return (
-      <div className="min-h-screen bg-black text-green-400 font-mono p-4">
-        <OtpVerification 
-          sharedSecret={sharedSecret}
-          onVerified={() => console.log('OTP verified successfully')}
-          onFailed={() => console.log('OTP verification failed')}
-          onBack={() => setCurrentView('qr')}
-        />
-      </div>
-    );
-  }
-
+  };  
+  
   return (
-    <div className="min-h-screen bg-black text-green-400 font-mono p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Terminal Header */}
-        <div className="border border-green-400 mb-4">
-          <div className="bg-green-400 text-black px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Terminal className="w-4 h-4" />
-              <span className="font-bold">QRNG Authentication Terminal</span>
-            </div>
-            <div className="flex space-x-1">
-              <div className="w-3 h-3 bg-black border border-black"></div>
-              <div className="w-3 h-3 bg-black border border-black"></div>
-              <div className="w-3 h-3 bg-black border border-black"></div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-black relative overflow-hidden font-mono">
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full opacity-30"
+      />
 
-          <div>
-            {currentView === 'qr' ? (
-              <QrPage 
-                email={email} 
-                onQRGenerated={handleQRSuccess}
-                onBack={handleBackToLogin}
-              />
-            ) : (
-              <div className="p-6 min-h-[600px]">
-                {/* Terminal Output */}
-                <div className="mb-8">
-                  <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {terminalText}
-                    {isTyping && <span className="animate-pulse">█</span>}
-                  </pre>
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        {currentView === 'login' ? (
+          <div className="w-full max-w-md">
+            {/* ... Your existing login form (no changes) ... */}
+            <div className="cyber-panel bg-black border-2 border-[#00ff41] p-8 relative rounded-3xl">
+              <div className="absolute top-0 left-0 w-3 h-3 border-t-4 border-l-4 border-[#00ff41] rounded-tl-3xl"></div>
+              <div className="absolute top-0 right-0 w-3 h-3 border-t-4 border-r-4 border-[#00ff41] rounded-tr-3xl"></div>
+              <div className="absolute bottom-0 left-0 w-3 h-3 border-b-4 border-l-4 border-[#00ff41] rounded-bl-3xl"></div>
+              <div className="absolute bottom-0 right-0 w-3 h-3 border-b-4 border-r-4 border-[#00ff41] rounded-br-3xl"></div>
+
+              <h1 className="text-3xl font-bold text-[#00ff41] mb-2 text-center tracking-wider">
+                AUTHENTICATION SYSTEM
+              </h1>
+              <div className="h-px bg-gradient-to-r from-transparent via-[#00ff41] to-transparent mb-6"></div>
+
+              {error && (
+                <div className="bg-black border-2 border-[#ff0000] p-3 mb-6 text-[#ff0000] text-sm animate-pulse-slow rounded-2xl">
+                  <span className="inline-block mr-2">⚠</span>
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label htmlFor="email" className="block text-[#00ff41] text-sm mb-2 tracking-wide">
+                    EMAIL_ADDRESS:
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full bg-black border-2 border-[#00ff41] text-[#00ff41] px-4 py-3 focus:outline-none focus:border-[#00ff88] transition-all duration-300 cyber-input rounded-xl"
+                    placeholder="user@system.net"
+                  />
                 </div>
 
-                {/* Login Form */}
-                {!isTyping && (
-                  <div className="space-y-6">
-                    {/* Error Message */}
-                    {error && (
-                      <div className="border border-red-400 bg-red-900/20 text-red-400 p-3 flex items-center">
-                        <AlertCircle className="w-4 h-4 mr-2" />
-                        <span className="text-sm">{error}</span>
-                      </div>
-                    )}
-                    
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      {/* Email Field */}
-                      <div>
-                        <div className="flex items-center mb-2">
-                          <Mail className="w-4 h-4 mr-2" />
-                          <label htmlFor="email" className="text-sm">
-                            EMAIL:
-                          </label>
-                        </div>
-                        <input
-                          id="email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="w-full bg-black border border-green-400 px-3 py-2 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
-                          placeholder="user@domain.com"
-                          required
-                        />
-                      </div>
-
-                      {/* Password Field */}
-                      <div>
-                        <div className="flex items-center mb-2">
-                          <Lock className="w-4 h-4 mr-2" />
-                          <label htmlFor="password" className="text-sm">
-                            PASSWORD:
-                          </label>
-                        </div>
-                        <div className="relative">
-                          <input
-                            id="password"
-                            type={showPassword ? 'text' : 'password'}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-black border border-green-400 px-3 py-2 pr-10 text-green-400 focus:outline-none focus:border-green-300 placeholder-green-600"
-                            placeholder="••••••••••••••••"
-                            required
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-green-400 hover:text-green-300"
-                          >
-                            {showPassword ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Options */}
-                      <div className="flex items-center justify-between text-sm">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={rememberMe}
-                            onChange={(e) => setRememberMe(e.target.checked)}
-                            className="mr-2 accent-green-400"
-                          />
-                          Remember session
-                        </label>
-                        <button
-                          type="button"
-                          className="text-green-400 hover:text-green-300 underline"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
-
-                      {/* Submit Button */}
-                      <div className="pt-4">
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="w-full border border-green-400 bg-black text-green-400 py-3 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {loading ? 'AUTHENTICATING...' : 'AUTHENTICATE'}
-                          {!loading && <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />}
-                        </button>
-                      </div>
-                    </form>
-
-                    {/* Alternative Options */}
-                    <div className="pt-6 border-t border-green-400">
-                      <div className="text-sm mb-4">Alternative authentication methods:</div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <button className="border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 text-sm">
-                          QUANTUM KEY
-                        </button>
-                        <button className="border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 text-sm">
-                          BIOMETRIC
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="pt-6 text-xs text-green-600">
-                      <div>QRNG System v2.1.4 | Quantum Secure Authentication</div>
-                      <div className="mt-1">
-                        New user? <button className="text-green-400 hover:text-green-300 underline">Request access</button>
-                      </div>
-                    </div>
+                <div>
+                  <label htmlFor="password" className="block text-[#00ff41] text-sm mb-2 tracking-wide">
+                    PASSWORD:
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="w-full bg-black border-2 border-[#00ff41] text-[#00ff41] px-4 py-3 pr-24 focus:outline-none focus:border-[#00ff88] transition-all duration-300 cyber-input rounded-xl"
+                      placeholder="••••••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#00ff41] border border-[#00ff41] px-3 py-1 text-xs hover:bg-[#00ff41] hover:text-black transition-all duration-200 rounded-lg"
+                    >
+                      {showPassword ? 'HIDE' : 'SHOW'}
+                    </button>
                   </div>
-                )}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="remember"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 bg-black border-2 border-[#00ff41] checked:bg-[#00ff41] focus:outline-none cursor-pointer rounded"
+                  />
+                  <label htmlFor="remember" className="text-[#00ff41] text-sm cursor-pointer hover:text-[#00ff88] transition-colors">
+                    REMEMBER_SESSION
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-black border-2 border-[#00ff41] text-[#00ff41] py-3 font-bold tracking-wider hover:bg-[#00ff41] hover:text-black transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] rounded-xl"
+                >
+                  {loading ? (
+                    <span className="inline-flex items-center justify-center">
+                      <span className="animate-pulse">AUTHENTICATING</span>
+                      <span className="ml-2 animate-ping">...</span>
+                    </span>
+                  ) : (
+                    'AUTHENTICATE'
+                  )}
+                </button>
+              </form>
+
+
+              <div className="mt-6 pt-4 border-t border-[#003300] text-center">
+                <p className="text-[#003300] text-xs tracking-wider">
+                  SYSTEM_STATUS: <span className="text-[#00ff41] animate-pulse">ONLINE</span>
+                </p>
               </div>
-            )}
+            </div>
+
+            <div className="mt-4 text-center text-[#003300] text-xs">
+              <p className="animate-pulse-slow">SECURE_CONNECTION_ESTABLISHED</p>
+            </div>
           </div>
-        </div>
+        ) : (
+          
+          // --- QR CODE & OTP VERIFICATION VIEW ---
+          <QRCode 
+            email={email} 
+            onQRGenerated={() => {
+              console.log('Authentication Complete!');
+              // Handle successful verification
+              alert('Authentication Successful! Redirecting...');
+              setCurrentView('login');
+              setEmail('');
+              setPassword('');
+            }}
+            onBack={() => setCurrentView('login')}
+          />
+        )}
       </div>
+
+      <style>{`
+        /* ... your existing styles (no changes) ... */
+        @keyframes pulse-slow {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
+        }
+
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
+
+        .cyber-panel {
+          position: relative;
+          backdrop-filter: blur(10px);
+        }
+
+        .cyber-panel::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(45deg, transparent 48%, #00ff41 49%, #00ff41 51%, transparent 52%);
+          background-size: 20px 20px;
+          opacity: 0.03;
+          pointer-events: none;
+          border-radius: 1.5rem;
+        }
+
+        .cyber-input {
+          font-family: 'Courier New', monospace;
+          letter-spacing: 0.05em;
+        }
+
+        .cyber-input::placeholder {
+          color: #003300;
+        }
+
+        input[type="checkbox"]:checked {
+          background-color: #00ff41;
+          background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='black' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+        }
+
+        body {
+          background: #000000;
+          overflow-x: hidden;
+        }
+      `}</style>
     </div>
   );
 }

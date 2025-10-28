@@ -1,4 +1,3 @@
-// src/app/Components/OtpVerification.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -19,40 +18,12 @@ const OtpVerification: React.FC<OtpVerificationProps> = ({
 }) => {
   const [otpCode, setOtpCode] = useState<string>('');
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
-  const [remainingTime, setRemainingTime] = useState<number>(30);
-  const [currentServerTime, setCurrentServerTime] = useState<number>(0);
-
-  useEffect(() => {
-    // Get server time to ensure synchronization
-    const getServerTime = async () => {
-      try {
-        const response = await fetch('http://127.0.0.1:5000/server-time');
-        const data = await response.json();
-        setCurrentServerTime(data.timestamp);
-      } catch (error) {
-        console.error('Error fetching server time:', error);
-      }
-    };
-
-    getServerTime();
-    
-    // Update countdown timer
-    const timer = setInterval(() => {
-      setRemainingTime(prev => {
-        if (prev <= 1) {
-          // Reset to 30 seconds when time is up
-          return 30;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
 
   const verifyOtp = async () => {
     try {
-      // Local verification using otplib
+      // Reset verification status on new attempt
+      setIsVerified(null); 
+      
       const isValid = authenticator.verify({
         token: otpCode,
         secret: sharedSecret
@@ -60,16 +31,14 @@ const OtpVerification: React.FC<OtpVerificationProps> = ({
 
       if (isValid) {
         setIsVerified(true);
-        onVerified && onVerified();
+        // Wait a moment before calling onVerified to show success message
+        setTimeout(() => {
+          onVerified && onVerified();
+        }, 1500);
       } else {
         setIsVerified(false);
         onFailed && onFailed();
       }
-
-      // (Optional) You can also still verify with server if you want double check
-      // const response = await fetch('http://127.0.0.1:5000/verify-otp', {...});
-      // const result = await response.json();
-      // setIsVerified(result.valid);
     } catch (error) {
       console.error('Error verifying OTP:', error);
       setIsVerified(false);
@@ -77,37 +46,57 @@ const OtpVerification: React.FC<OtpVerificationProps> = ({
     }
   };
 
+  // --- MODIFIED: Removed full-screen wrappers ---
   return (
-    <div className="p-4 border border-green-400 mt-4">
-      <h2 className="text-lg mb-4">Enter Authentication Code</h2>
-      
-      <div className="flex space-x-2 mb-4">
-        <input
-          type="text"
-          value={otpCode}
-          onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="6-digit code"
-          className="bg-black border border-green-400 text-green-400 p-2 focus:outline-none"
-          maxLength={6}
-        />
+    <div className="w-full h-full flex flex-col">
+      {/* Form Content - without extra panel */}
+      <div className="space-y-4 flex flex-col">
+        <div>
+          <label htmlFor="otp" className="block text-[#00ff41] text-sm mb-2 tracking-wide">
+            ENTER_6_DIGIT_CODE:
+          </label>
+          <input
+            id="otp"
+            type="text"
+            inputMode="numeric"
+            value={otpCode}
+            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="000000"
+            maxLength={6}
+            className="w-full bg-black border-2 border-[#00ff41] text-[#00ff41] px-4 py-3 focus:outline-none focus:border-[#00ff88] transition-all duration-300 cyber-input rounded-xl text-center text-2xl tracking-widest"
+          />
+        </div>
+
         <button 
           onClick={verifyOtp}
-          className="bg-green-400 text-black px-4 py-2 hover:bg-green-500"
+          disabled={otpCode.length < 6 || isVerified === true}
+          className="w-full bg-black border-2 border-[#00ff41] text-[#00ff41] py-3 font-bold tracking-wider hover:bg-[#00ff41] hover:text-black transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] rounded-xl"
         >
-          Verify
+          {isVerified === true ? 'VERIFIED ✓' : 'VERIFY_CODE'}
         </button>
-      </div>
-      
-      {isVerified === true && (
-        <div className="text-green-400 mt-2">Verification successful!</div>
-      )}
-      
-      {isVerified === false && (
-        <div className="text-red-500 mt-2">Invalid code. Please try again.</div>
-      )}
-      
-      <div className="mt-2 text-sm">
-        Code refreshes in: {remainingTime} seconds
+
+        {isVerified === true && (
+          <div className="bg-black border-2 border-[#00ff41] p-4 text-[#00ff41] text-center rounded-2xl animate-pulse-slow">
+            <span className="inline-block mr-2">✓</span>
+            VERIFICATION_SUCCESSFUL
+          </div>
+        )}
+        
+        {isVerified === false && (
+          <div className="bg-black border-2 border-[#ff0000] p-4 text-[#ff0000] text-center rounded-2xl animate-pulse-slow">
+            <span className="inline-block mr-2">✗</span>
+            INVALID_CODE_TRY_AGAIN
+          </div>
+        )}
+
+        {onBack && (
+          <button 
+            onClick={onBack}
+            className="w-full bg-black border-2 border-[#003300] text-[#003300] py-2 font-bold tracking-wider hover:border-[#ff0000] hover:text-[#ff0000] transition-all duration-300 rounded-lg mt-2"
+          >
+            BACK_TO_LOGIN
+          </button>
+        )}
       </div>
     </div>
   );

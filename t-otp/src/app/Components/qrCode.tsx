@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { Terminal, QrCode, RefreshCw, AlertTriangle, CheckCircle } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 import OtpVerification from "./OtpVerfication";
 
 interface QrPageProps {
@@ -12,54 +11,69 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
   const [qr, setQr] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
-  const [terminalText, setTerminalText] = useState('');
-  const [isTyping, setIsTyping] = useState(true);
   const [sharedSecret, setSharedSecret] = useState<string>('');
-
-  const terminalMessages = [
-    'Initializing quantum secure QR generator...',
-    'Establishing encrypted connection...',
-    'Generating quantum-secured authentication token...',
-    'QR code generation in progress...',
-    '',
-    'Scan the QR code below with your authenticator:'
-  ];
+  const [showOTPVerification, setShowOTPVerification] = useState<boolean>(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    let messageIndex = 0;
-    let charIndex = 0;
-    let currentMessage = '';
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const typeWriter = () => {
-      if (messageIndex < terminalMessages.length) {
-        if (charIndex < terminalMessages[messageIndex].length) {
-          currentMessage += terminalMessages[messageIndex][charIndex];
-          setTerminalText(currentMessage);
-          charIndex++;
-          setTimeout(typeWriter, 30);
-        } else {
-          currentMessage += '\n';
-          setTerminalText(currentMessage);
-          messageIndex++;
-          charIndex = 0;
-          setTimeout(typeWriter, messageIndex === terminalMessages.length - 2 ? 1000 : 400);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()';
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops: number[] = [];
+
+    for (let i = 0; i < columns; i++) {
+      drops[i] = Math.random() * -100;
+    }
+
+    const draw = () => {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#00ff41';
+      ctx.font = `${fontSize}px monospace`;
+
+      for (let i = 0; i < drops.length; i++) {
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+          drops[i] = 0;
         }
-      } else {
-        setIsTyping(false);
+
+        drops[i]++;
       }
     };
 
-    typeWriter();
+    const interval = setInterval(draw, 33);
+
+    const handleResize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   useEffect(() => {
     const fetchQRCode = async () => {
       try {
+        console.log('Fetching QR code for email:', email);
         setLoading(true);
         setError("");
-        
-        // Simulate network delay for better UX
-        await new Promise(resolve => setTimeout(resolve, 1500));
         
         const response = await fetch('http://127.0.0.1:5000/generate_qr', {
           method: 'POST',
@@ -76,12 +90,8 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
 
         const data = await response.json();
         setQr(data.qr);
-        setSharedSecret(data.shared_secret); // Assuming backend sends shared_secret
-        
-        // Call the callback with the shared secret if provided
-        if (onQRGenerated && data.shared_secret) {
-          onQRGenerated(data.shared_secret);
-        }
+        setSharedSecret(data.shared_secret);
+        setShowOTPVerification(true);
       } catch (error) {
         console.error('Error fetching QR code:', error);
         setError(error instanceof Error ? error.message : 'Failed to generate QR code');
@@ -90,17 +100,16 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
       }
     };
 
-    if (email && !isTyping) {
+    if (email) {
       fetchQRCode();
     }
-  }, [email, isTyping]);
+  }, [email]);
 
   const handleRetry = () => {
     setError("");
     setQr("");
     setLoading(true);
     
-    // Re-fetch QR code
     const fetchQRCode = async () => {
       try {
         const response = await fetch('http://127.0.0.1:5000/generate_qr', {
@@ -108,6 +117,7 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
           headers: {
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ email }),
           credentials: 'include'
         });
 
@@ -117,6 +127,7 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
 
         const data = await response.json();
         setQr(data.qr);
+        setSharedSecret(data.shared_secret);
       } catch (error) {
         console.error('Error fetching QR code:', error);
         setError(error instanceof Error ? error.message : 'Failed to generate QR code');
@@ -129,145 +140,163 @@ const QrPage: React.FC<QrPageProps> = ({ email, onBack, onQRGenerated }) => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-green-400 font-mono p-4">
-    <div className="max-w-2xl mx-auto">
-      <div className="border border-green-400 mb-4">
-        {/* ✅ Keep only one header, this terminal-style one */}
-        <div className="bg-green-400 text-black px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Terminal className="w-4 h-4" />
-            <span className="font-bold">QRNG QR Code Generator Terminal</span>
-          </div>
-          <div className="flex space-x-1">
-            <div className="w-3 h-3 bg-black border border-black"></div>
-            <div className="w-3 h-3 bg-black border border-black"></div>
-            <div className="w-3 h-3 bg-black border border-black"></div>
-          </div>
-        </div>
-          
-          {/* Terminal Content */}
-          <div className="p-6 min-h-[600px]">
-            {/* Terminal Output */}
-            <div className="mb-8">
-              <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                {terminalText}
-                {isTyping && <span className="animate-pulse">█</span>}
-              </pre>
+    <div className="min-h-screen bg-black relative overflow-hidden font-mono">
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full opacity-30"
+      />
+
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-7xl">
+          {loading && (
+            <div className="bg-black border-2 border-[#00ff41] p-4 mb-6 text-[#00ff41] text-center rounded-2xl">
+              <p className="animate-pulse">GENERATING_QR_CODE...</p>
             </div>
+          )}
 
-            {/* QR Code Section */}
-            {!isTyping && (
-              <div className="space-y-6">
-                {/* User Info */}
-                <div className="border border-green-400 p-4">
-                  <div className="text-sm mb-2">USER_EMAIL:</div>
-                  <div className="text-green-300">{email}</div>
-                </div>
+          {error && (
+            <div className="bg-black border-2 border-[#ff0000] p-3 mb-6 text-[#ff0000] text-sm animate-pulse-slow rounded-2xl">
+              <span className="inline-block mr-2">⚠</span>
+              {error}
+              <button 
+                onClick={handleRetry}
+                className="block mt-3 w-full bg-black border-2 border-[#ff0000] text-[#ff0000] py-2 hover:bg-[#ff0000] hover:text-black transition-all duration-300 rounded-lg"
+              >
+                RETRY
+              </button>
+            </div>
+          )}
 
-                {/* QR Code Display */}
-                <div className="border border-green-400 p-6">
-                  <div className="flex items-center mb-4">
-                    <QrCode className="w-4 h-4 mr-2" />
-                    <span className="text-sm">QUANTUM_QR_CODE:</span>
-                  </div>
+          {qr && !loading && !error && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-fit">
+              {/* Left Panel - QR Code */}
+              <div className="cyber-panel bg-black border-2 border-[#00ff41] p-8 relative rounded-3xl flex flex-col">
+                <div className="absolute top-0 left-0 w-3 h-3 border-t-4 border-l-4 border-[#00ff41] rounded-tl-3xl"></div>
+                <div className="absolute top-0 right-0 w-3 h-3 border-t-4 border-r-4 border-[#00ff41] rounded-tr-3xl"></div>
+                <div className="absolute bottom-0 left-0 w-3 h-3 border-b-4 border-l-4 border-[#00ff41] rounded-bl-3xl"></div>
+                <div className="absolute bottom-0 right-0 w-3 h-3 border-b-4 border-r-4 border-[#00ff41] rounded-br-3xl"></div>
 
-                  <div className="flex flex-col items-center">
-                    {loading && (
-                      <div className="flex flex-col items-center space-y-4">
-                        <div className="w-64 h-64 border border-green-400 flex items-center justify-center">
-                          <div className="text-center">
-                            <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin" />
-                            <div className="text-sm">GENERATING...</div>
-                            <div className="text-xs mt-1">Please wait</div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                <h1 className="text-3xl font-bold text-[#00ff41] mb-2 text-center tracking-wider">
+                  QR CODE GENERATOR
+                </h1>
+                <div className="h-px bg-gradient-to-r from-transparent via-[#00ff41] to-transparent mb-6"></div>
 
-                    {error && (
-                      <div className="flex flex-col items-center space-y-4">
-                        <div className="w-64 h-64 border border-red-400 flex items-center justify-center">
-                          <div className="text-center text-red-400">
-                            <AlertTriangle className="w-8 h-8 mx-auto mb-2" />
-                            <div className="text-sm">ERROR</div>
-                            <div className="text-xs mt-1 px-4">{error}</div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={handleRetry}
-                          className="border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          RETRY_GENERATION
-                        </button>
-                      </div>
-                    )}
-
-                    {qr && !loading && !error && (
-                      <div className="flex flex-col items-center space-y-4">
-                        <div className="border border-green-400 p-4 bg-white">
-                          <img 
-                            src={qr} 
-                            alt="Authentication QR Code" 
-                            className="w-64 h-64"
-                          />
-                        </div>
-                        <div className="flex items-center text-green-300">
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          <span className="text-sm">QR_CODE_READY</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Instructions */}
-                {qr && !loading && !error && (
-                  <div className="border border-green-400 p-4">
-                    <div className="text-sm mb-3">INSTRUCTIONS:</div>
-                    <div className="text-xs text-green-600 space-y-1">
-                      <div>{">"} Open your authenticator app</div>
-                      <div>{">"} Scan the QR code above</div>
-                      <div>{">"} Enter the generated code when prompted</div>
-                      <div>{">"} Keep your device secure</div>
+                <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                  <div className="flex justify-center">
+                    <div className="border-2 border-[#00ff41] p-4 rounded-2xl">
+                      <img 
+                        src={qr} 
+                        alt="Authentication QR Code" 
+                        className="w-56 h-56"
+                      />
                     </div>
                   </div>
-                )}
-            
-                {/* Action Buttons */}
-                <div className="space-y-4">
-                  {qr && !loading && !error && (
-                    <button
-                      onClick={handleRetry}
-                      className="w-full border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200 flex items-center justify-center"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      REGENERATE_QR
-                    </button>
-                  )}
 
-                  {onBack && (
-                    <button
-                      onClick={onBack}
-                      className="w-full border border-green-400 bg-black text-green-400 py-2 px-4 hover:bg-green-400 hover:text-black transition-colors duration-200"
-                    >
-                      BACK_TO_PREVIOUS
-                    </button>
-                  )}
-                </div>
+                  <div className="text-center w-full">
+                    <p className="text-[#00ff41] font-bold tracking-wider">QR_CODE_READY</p>
+                  </div>
 
-                {/* Footer */}
-                <div className="pt-6 text-xs text-green-600">
-                  <div>QRNG System v2.1.4 | Quantum QR Code Generator</div>
-                  <div className="mt-1">
-                    Need help? <button className="text-green-400 hover:text-green-300 underline">Contact support</button>
+                  <div className="border-t border-[#003300] pt-4 w-full">
+                    <h3 className="text-[#00ff41] font-bold mb-2 tracking-wider text-sm">INSTRUCTIONS:</h3>
+                    <ul className="space-y-1 text-[#00ff41] text-xs">
+                      <li className="flex items-center"><span className="mr-2">→</span>Open authenticator app</li>
+                      <li className="flex items-center"><span className="mr-2">→</span>Scan QR code</li>
+                      <li className="flex items-center"><span className="mr-2">→</span>Enter generated code</li>
+                    </ul>
                   </div>
                 </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button 
+                    onClick={handleRetry}
+                    className="flex-1 bg-black border-2 border-[#00ff41] text-[#00ff41] py-2 font-bold tracking-wider hover:bg-[#00ff41] hover:text-black transition-all duration-300 rounded-lg text-sm"
+                  >
+                    REGENERATE
+                  </button>
+
+                  {onBack && (
+                    <button 
+                      onClick={onBack}
+                      className="flex-1 bg-black border-2 border-[#00ff41] text-[#00ff41] py-2 font-bold tracking-wider hover:bg-[#00ff41] hover:text-black transition-all duration-300 rounded-lg text-sm"
+                    >
+                      BACK
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
+
+              {/* Right Panel - OTP Verification */}
+              {showOTPVerification && sharedSecret && (
+                <div className="cyber-panel bg-black border-2 border-[#00ff41] p-8 relative rounded-3xl flex flex-col">
+                  <div className="absolute top-0 left-0 w-3 h-3 border-t-4 border-l-4 border-[#00ff41] rounded-tl-3xl"></div>
+                  <div className="absolute top-0 right-0 w-3 h-3 border-t-4 border-r-4 border-[#00ff41] rounded-tr-3xl"></div>
+                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-4 border-l-4 border-[#00ff41] rounded-bl-3xl"></div>
+                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-4 border-r-4 border-[#00ff41] rounded-br-3xl"></div>
+
+                  <h1 className="text-3xl font-bold text-[#00ff41] mb-2 text-center tracking-wider">
+                    OTP VERIFICATION
+                  </h1>
+                  <div className="h-px bg-gradient-to-r from-transparent via-[#00ff41] to-transparent mb-6"></div>
+
+                  <div className="flex-1 flex flex-col justify-between">
+                    <OtpVerification 
+                      sharedSecret={sharedSecret}
+                      onVerified={() => {
+                        console.log('OTP verified successfully');
+                        if (onQRGenerated) {
+                          onQRGenerated(sharedSecret);
+                        }
+                      }}
+                      onFailed={() => console.log('OTP verification failed')}
+                      onBack={() => setShowOTPVerification(false)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 text-center text-[#003300] text-xs">
+            <p className="animate-pulse-slow">SYSTEM_STATUS: <span className="text-[#00ff41]">OPERATIONAL</span></p>
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes pulse-slow {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
+        }
+
+        .animate-pulse-slow {
+          animation: pulse-slow 3s ease-in-out infinite;
+        }
+
+        .cyber-panel {
+          position: relative;
+          backdrop-filter: blur(10px);
+        }
+
+        .cyber-panel::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(45deg, transparent 48%, #00ff41 49%, #00ff41 51%, transparent 52%);
+          background-size: 20px 20px;
+          opacity: 0.03;
+          pointer-events: none;
+          border-radius: 1.5rem;
+        }
+
+        body {
+          background: #000000;
+          overflow-x: hidden;
+        }
+      `}</style>
     </div>
   );
 };

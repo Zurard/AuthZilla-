@@ -7,7 +7,7 @@ def qrng_random_int(bytes):
     rng =  []
     n=6
     max_val = 10
-    while ( n > 0):
+    while ( n > 0): 
         bits = generate_random_bits(16)
         num = int(''.join(map(str, bits)), 2)
         # print(num % max_val)

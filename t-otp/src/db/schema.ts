@@ -7,11 +7,7 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').unique().notNull(),
   password: text('password').notNull(), // Store hashed passwords
-  isVerified: boolean('is_verified').default(false),
-  sharedSecret: text('shared_secret'), // For OTP/2FA
   createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-  lastLogin: timestamp('last_login'),
 });
 
 // Zod schemas for validation
