@@ -158,8 +158,4 @@ The Python service exposes two main endpoints:
 ```
 
 
-[Add your license here]
-
-## 🤝 Contributing
-
 [Add contribution guidelines here]
